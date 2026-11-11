@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>循环训练计划</title>
+<style>
+  :root{
+    --bg:#f4f6f8; --card:#fff; --text:#1f2933; --muted:#6b7785;
+    --accent:#2f6fed; --accent-soft:#e8f0fe; --rest:#8a94a6; --line:#e3e8ee;
+    --danger:#d64545; --radius:14px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{
+    margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    padding:16px 14px calc(90px + env(safe-area-inset-bottom));
+    max-width:640px;margin:0 auto;
+  }
+  h1{font-size:20px;margin:4px 0 12px}
+  .tabs{display:flex;gap:8px;margin-bottom:16px}
+  .tab{
+    flex:1;padding:10px 0;border-radius:10px;background:#e9edf2;color:var(--muted);
+    font-size:15px;border:none;font:inherit;cursor:pointer;
+  }
+  .tab.active{background:var(--accent);color:#fff}
+  .date{color:var(--muted);font-size:14px;margin-bottom:16px}
+  .card{
+    background:var(--card);border-radius:var(--radius);padding:14px 16px;
+    margin-bottom:12px;box-shadow:0 1px 3px rgba(16,24,40,.06);border:1px solid var(--line);
+  }
+  .card.disabled{opacity:.55}
+  .card-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+  .card-title{font-weight:600;font-size:16px}
+  .badge{font-size:12px;color:var(--accent);background:var(--accent-soft);padding:2px 8px;border-radius:20px;white-space:nowrap}
+  .badge.rest{color:var(--rest);background:#eef1f5}
+  .badge.off{color:var(--muted);background:#eef1f5}
+  .items{margin:0;padding:0;list-style:none}
+  .items li{font-size:14px;color:var(--text);padding:4px 0;border-bottom:1px dashed var(--line)}
+  .items li:last-child{border-bottom:none}
+  .items .note{color:var(--muted);font-size:12px;margin-left:6px}
+  .rest-text{color:var(--rest);font-size:14px}
+  .meta{color:var(--muted);font-size:13px;margin-top:2px}
+  .actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  button{
+    font:inherit;border:none;border-radius:10px;padding:9px 12px;cursor:pointer;
+    background:#eef1f5;color:var(--text);font-size:14px;
+  }
+  button.primary{background:var(--accent);color:#fff}
+  button.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+  button.danger{background:transparent;color:var(--danger);border:1px solid var(--danger)}
+  button:active{opacity:.75}
+  button.small-btn{padding:6px 10px;font-size:13px}
+  .topbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+  .empty{color:var(--muted);font-size:14px;text-align:center;padding:20px 0}
+  .footer{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  dialog{
+    border:none;border-radius:16px;padding:0;width:min(92vw,520px);
+    max-height:86vh;box-shadow:0 12px 40px rgba(0,0,0,.2);
+  }
+  dialog::backdrop{background:rgba(15,23,42,.45)}
+  .dlg-body{padding:18px;overflow:auto;max-height:86vh}
+  .dlg-body h2{font-size:17px;margin:0 0 14px}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  input[type=text],input[type=date],input[type=number],textarea{
+    width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:9px;
+    font:inherit;background:#fbfcfd;color:var(--text);
+  }
+  textarea{resize:vertical;min-height:120px;font-family:monospace;font-size:12px}
+  .day-editor{border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:8px}
+  .day-editor .day-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .day-head strong{font-size:14px}
+  .small{font-size:12px;color:var(--muted)}
+  .dlg-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
+  .check{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);margin-top:6px}
+  .check input{width:auto;flex:none}
+  .item-edit{border-top:1px dashed var(--line);padding-top:8px;margin-top:8px}
+  .item-actions{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+  .backup-box{margin-top:10px;display:none}
+  .backup-box.show{display:block}
+  .backup-hint{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5}
+</style>
+</head>
+<body>
+
+<h1>循环训练计划</h1>
+
+<div class="tabs">
+  <button class="tab active" data-view="today">今日</button>
+  <button class="tab" data-view="manage">管理</button>
+</div>
+
+<!-- 今日视图 -->
+<div id="viewToday">
+  <div class="date" id="todayLabel"></div>
+  <div class="topbar" id="todayTopbar">
+    <button onclick="shiftAll(1)">全部顺延一天</button>
+    <button onclick="shiftAll(-1)">全部提前一天</button>
+  </div>
+  <div id="cycleList"></div>
+</div>
+
+<!-- 管理视图 -->
+<div id="viewManage" style="display:none">
+  <div class="topbar">
+    <button class="primary" onclick="openCycleEditor(null)">+ 新建循环</button>
+  </div>
+  <div id="manageList"></div>
+
+  <div class="card">
+    <div class="card-title" style="margin-bottom:8px">备份与恢复</div>
+    <div class="actions">
+      <button onclick="exportData()">导出文件</button>
+      <button onclick="showCopyBackup()">复制备份文本</button>
+      <button onclick="document.getElementById('importFile').click()">从文件导入</button>
+      <button onclick="showPasteBackup()">粘贴备份文本</button>
+    </div>
+    <input type="file" id="importFile" accept=".json,application/json" style="display:none" onchange="importData(event)">
+
+    <div class="backup-box" id="copyBox">
+      <label>备份内容（全选复制，保存到备忘录/网盘）</label>
+      <textarea id="copyText" readonly></textarea>
+      <div class="backup-hint">如果自动复制失败，请长按文本框全选后手动复制。</div>
+    </div>
+
+    <div class="backup-box" id="pasteBox">
+      <label>粘贴备份内容</label>
+      <textarea id="pasteText" placeholder="在这里粘贴之前复制的 JSON 备份"></textarea>
+      <div class="actions">
+        <button class="primary" onclick="importPasted()">确认导入</button>
+        <button onclick="hidePasteBackup()">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<dialog id="dlg">
+  <div class="dlg-body" id="dlgBody"></div>
+</dialog>
+
+<script>
+const STORE_KEY = 'cycle_training_plan_v1';
+let state = load();
+let uidSeed = Date.now();
+let currentView = 'today';
+
+function load(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    if(raw){
+      const data = JSON.parse(raw);
+      (data.cycles||[]).forEach(c=>{
+        if(typeof c.enabled !== 'boolean') c.enabled = true;
+        (c.days||[]).forEach(d=>{
+          d.items = (d.items||[]).map(it=>({uid: it.uid || newUid(), name: it.name||'', detail: it.detail||''}));
+        });
+      });
+      return data;
+    }
+  }catch(e){}
+  return { cycles: [] };
+}
+function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+
+function fmtDate(d){
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function parseDate(s){
+  const [y,m,d] = s.split('-').map(Number);
+  return new Date(y, m-1, d);
+}
+function daysBetween(a,b){
+  const ms = parseDate(b).getTime() - parseDate(a).getTime();
+  return Math.floor(ms / 86400000);
+}
+function addDays(s, n){
+  const d = parseDate(s); d.setDate(d.getDate()+n); return fmtDate(d);
+}
+function todayStr(){ return fmtDate(new Date()); }
+function esc(s){ return String(s||'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function newUid(){ return 'u' + (uidSeed++); }
+
+function cycleDayIndex(cycle){
+  const len = Math.max(1, cycle.length|0);
+  const diff = daysBetween(cycle.start, todayStr());
+  if(diff < 0) return { index: null, note: '未开始' };
+  return { index: diff % len, note: '' };
+}
+
+function switchView(v){
+  currentView = v;
+  document.querySelectorAll('.tab').forEach(t=>{
+    t.classList.toggle('active', t.getAttribute('data-view') === v);
+  });
+  document.getElementById('viewToday').style.display = v === 'today' ? '' : 'none';
+  document.getElementById('viewManage').style.display = v === 'manage' ? '' : 'none';
+  render();
+}
+
+function render(){
+  if(currentView === 'today') renderToday();
+  else renderManage();
+}
+
+function renderToday(){
+  const t = new Date();
+  const week = ['日','一','二','三','四','五','六'][t.getDay()];
+  document.getElementById('todayLabel').textContent =
+    `${t.getFullYear()}年${t.getMonth()+1}月${t.getDate()}日 周${week}`;
+
+  const list = document.getElementById('cycleList');
+  const enabledCycles = state.cycles.map((c,i)=>({c,i})).filter(x=>x.c.enabled !== false);
+
+  if(!state.cycles.length){
+    list.innerHTML = '<div class="card empty">还没有循环，去“管理”里新建一个。</div>';
+    return;
+  }
+  if(!enabledCycles.length){
+    list.innerHTML = '<div class="card empty">所有循环都已关闭，去“管理”里开启。</div>';
+    return;
+  }
+
+  list.innerHTML = '';
+  enabledCycles.forEach(({c, i: ci}) => {
+    const {index, note} = cycleDayIndex(c);
+    const len = Math.max(1, c.length|0);
+    const day = index === null ? null : c.days[index];
+
+    let bodyHtml = '';
+    if(index === null){
+      bodyHtml = `<div class="rest-text">${note}（起始日 ${c.start}）</div>`;
+    } else if(!day || day.rest){
+      bodyHtml = `<div class="rest-text">今天休息 · 第 ${index+1}/${len} 天</div>`;
+    } else {
+      const items = (day.items||[]).filter(i=>i.name && i.name.trim());
+      bodyHtml = items.length
+        ? `<ul class="items">${items.map(i=>`<li>${esc(i.name)}<span class="note">${esc(i.detail||'')}</span></li>`).join('')}</ul>`
+        : `<div class="rest-text">今天没有具体项目</div>`;
+    }
+
+    const badge = day && !day.rest && index!==null
+      ? `<span class="badge">第 ${index+1}/${len} 天</span>`
+      : `<span class="badge rest">${index===null?'未开始':'休息'}</span>`;
+
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="card-head">
+        <div class="card-title">${esc(c.name)}</div>
+        ${badge}
+      </div>
+      ${bodyHtml}
+      <div class="actions">
+        <button data-act="shift" data-i="${ci}">顺延一天</button>
+        <button data-act="advance" data-i="${ci}">提前一天</button>
+      </div>`;
+    card.querySelector('[data-act=shift]').onclick = () => shiftCycle(ci, 1);
+    card.querySelector('[data-act=advance]').onclick = () => shiftCycle(ci, -1);
+    list.appendChild(card);
+  });
+}
+
+function renderManage(){
+  const list = document.getElementById('manageList');
+  if(!state.cycles.length){
+    list.innerHTML = '<div class="card empty">还没有循环，点上方“新建循环”开始。</div>';
+    return;
+  }
+  list.innerHTML = '';
+  state.cycles.forEach((c, ci) => {
+    const len = Math.max(1, c.length|0);
+    const on = c.enabled !== false;
+    const card = document.createElement('div');
+    card.className = 'card' + (on ? '' : ' disabled');
+    card.innerHTML = `
+      <div class="card-head">
+        <div class="card-title">${esc(c.name)}</div>
+        <span class="badge ${on?'':'off'}">${on ? '开启中' : '已关闭'}</span>
+      </div>
+      <div class="meta">${len} 天循环 · 起始日 ${esc(c.start)}</div>
+      <div class="actions">
+        <button class="ghost small-btn" data-act="toggle" data-i="${ci}">${on ? '关闭' : '开启'}</button>
+        <button class="ghost small-btn" data-act="copy" data-i="${ci}">复制循环</button>
+        <button class="ghost small-btn" data-act="edit" data-i="${ci}">编辑</button>
+        <button class="ghost small-btn" data-act="shift" data-i="${ci}">顺延一天</button>
+        <button class="ghost small-btn" data-act="advance" data-i="${ci}">提前一天</button>
+      </div>`;
+    card.querySelector('[data-act=toggle]').onclick = () => toggleCycle(ci);
+    card.querySelector('[data-act=copy]').onclick = () => copyCycle(ci);
+    card.querySelector('[data-act=edit]').onclick = () => openCycleEditor(ci);
+    card.querySelector('[data-act=shift]').onclick = () => shiftCycle(ci, 1);
+    card.querySelector('[data-act=advance]').onclick = () => shiftCycle(ci, -1);
+    list.appendChild(card);
+  });
+}
+
+function toggleCycle(i){
+  const c = state.cycles[i];
+  if(!c) return;
+  c.enabled = c.enabled === false ? true : false;
+  save(); render();
+}
+
+function copyCycle(i){
+  const src = state.cycles[i];
+  if(!src) return;
+  const clone = JSON.parse(JSON.stringify(src));
+  clone.name = (src.name || '未命名') + ' 副本';
+  clone.enabled = src.enabled !== false;
+  clone.days = (clone.days||[]).map(d=>{
+    d.rest = !!d.rest;
+    d.items = (d.items||[]).map(it=>({uid: newUid(), name: it.name||'', detail: it.detail||''}));
+    return d;
+  });
+  state.cycles.splice(i+1, 0, clone);
+  save(); render();
+  alert('已复制为「' + clone.name + '」，可在下方编辑');
+}
+
+function shiftCycle(i, delta){
+  const c = state.cycles[i];
+  if(!c || c.enabled === false) return;
+  c.start = addDays(c.start, delta);
+  save(); render();
+}
+function shiftAll(delta){
+  const enabled = state.cycles.filter(c=>c.enabled !== false);
+  if(!enabled.length) return;
+  const word = delta > 0 ? '往后推一天' : '往前提前一天';
+  if(!confirm('把所有已开启的循环起始日都' + word + '？')) return;
+  enabled.forEach(c => c.start = addDays(c.start, delta));
+  save(); render();
+}
+
+function openCycleEditor(index){
+  const isNew = index === null;
+  const src = isNew
+    ? { name:'', length:4, start: todayStr(), days: defaultDays(4), enabled:true }
+    : state.cycles[index];
+
+  const draft = JSON.parse(JSON.stringify(src));
+  if(typeof draft.enabled !== 'boolean') draft.enabled = true;
+  draft.length = Math.max(1, draft.length|0);
+  draft.days = draft.days || [];
+  while(draft.days.length < draft.length){
+    draft.days.push({rest:true, items:[]});
+  }
+  draft.days = draft.days.slice(0, draft.length);
+  draft.days.forEach(d=>{
+    d.rest = !!d.rest;
+    d.items = (d.items||[]).map(it=>({uid: it.uid || newUid(), name: it.name||'', detail: it.detail||''}));
+  });
+
+  const dlg = document.getElementById('dlg');
+  const body = document.getElementById('dlgBody');
+
+  function renderEditor(){
+    body.innerHTML = `
+      <h2>${isNew?'新建循环':'编辑循环'}</h2>
+      <label>循环名称</label>
+      <input type="text" id="cName" value="${esc(draft.name)}" placeholder="如 握力循环">
+      <label>几天一循环</label>
+      <input type="number" id="cLen" min="1" max="30" value="${draft.length}">
+      <label>起始日</label>
+      <input type="date" id="cStart" value="${draft.start}">
+      <label class="check"><input type="checkbox" id="cEnabled" ${draft.enabled?'checked':''}> 开启这个循环</label>
+      <div id="daysWrap">${daysHtml()}</div>
+      <div class="dlg-actions">
+        ${isNew?'':`<button class="danger" id="delCycle">删除循环</button>`}
+        <button id="cancelBtn">取消</button>
+        <button class="primary" id="saveBtn">保存</button>
+      </div>`;
+    bindEditorEvents();
+  }
+
+  function daysHtml(){
+    let h = '';
+    for(let d=0; d<draft.length; d++){
+      const day = draft.days[d];
+      h += `<div class="day-editor">
+        <div class="day-head">
+          <strong>第 ${d+1} 天</strong>
+          <label class="check"><input type="checkbox" data-rest="${d}" ${day.rest?'checked':''}> 休息日</label>
+        </div>
+        <div style="${day.rest?'display:none':''}">
+          ${itemsHtml(day.items, d)}
+          <button type="button" class="ghost" data-additem="${d}" style="margin-top:8px">+ 添加项目</button>
+        </div>
+      </div>`;
+    }
+    return h;
+  }
+
+  function itemsHtml(items, d){
+    if(!items.length) return '<div class="small" style="margin-top:6px">暂无项目</div>';
+    return items.map((it) => `
+      <div class="item-edit">
+        <input type="text" placeholder="动作名，如 握力器" data-name="${d}|${it.uid}" value="${esc(it.name)}">
+        <input type="text" placeholder="组次/备注，如 3-5组×3-5次" data-detail="${d}|${it.uid}" value="${esc(it.detail)}" style="margin-top:6px">
+        <div class="item-actions">
+          <button type="button" class="ghost small-btn" data-copyitem="${d}|${it.uid}">复制项目</button>
+          <button type="button" class="danger small-btn" data-delitem="${d}|${it.uid}">删除项目</button>
+        </div>
+      </div>`).join('');
+  }
+
+  function syncFieldsToDraft(){
+    const nameEl = document.getElementById('cName');
+    const lenEl = document.getElementById('cLen');
+    const startEl = document.getElementById('cStart');
+    const enabledEl = document.getElementById('cEnabled');
+    if(nameEl) draft.name = nameEl.value.trim();
+    if(startEl) draft.start = startEl.value || draft.start;
+    if(enabledEl) draft.enabled = enabledEl.checked;
+
+    body.querySelectorAll('[data-name]').forEach(inp=>{
+      const [d, uid] = inp.getAttribute('data-name').split('|');
+      const day = draft.days[+d];
+      const it = day && day.items.find(x=>x.uid === uid);
+      if(it) it.name = inp.value;
+    });
+    body.querySelectorAll('[data-detail]').forEach(inp=>{
+      const [d, uid] = inp.getAttribute('data-detail').split('|');
+      const day = draft.days[+d];
+      const it = day && day.items.find(x=>x.uid === uid);
+      if(it) it.detail = inp.value;
+    });
+    body.querySelectorAll('[data-rest]').forEach(cb=>{
+      const d = +cb.getAttribute('data-rest');
+      if(draft.days[d]) draft.days[d].rest = cb.checked;
+    });
+    if(lenEl){
+      let n = parseInt(lenEl.value, 10);
+      if(!n || n < 1) n = 1;
+      if(n > 30) n = 30;
+      draft.length = n;
+    }
+  }
+
+  function normalizeDays(){
+    while(draft.days.length < draft.length) draft.days.push({rest:true, items:[]});
+    draft.days = draft.days.slice(0, draft.length);
+    draft.days.forEach(d=>{
+      d.items = (d.items||[]).map(it=>({uid: it.uid || newUid(), name: it.name||'', detail: it.detail||''}));
+    });
+  }
+
+  function bindEditorEvents(){
+    body.querySelectorAll('[data-additem]').forEach(btn=>{
+      btn.onclick = () => {
+        syncFieldsToDraft();
+        const d = +btn.getAttribute('data-additem');
+        if(!draft.days[d]) draft.days[d] = {rest:false, items:[]};
+        draft.days[d].rest = false;
+        draft.days[d].items.push({uid: newUid(), name:'', detail:''});
+        normalizeDays();
+        renderEditor();
+        const inputs = body.querySelectorAll(`[data-name^="${d}|"]`);
+        if(inputs.length) inputs[inputs.length-1].focus();
+      };
+    });
+    body.querySelectorAll('[data-copyitem]').forEach(btn=>{
+      btn.onclick = () => {
+        syncFieldsToDraft();
+        const [d, uid] = btn.getAttribute('data-copyitem').split('|');
+        const day = draft.days[+d];
+        if(!day) return;
+        const idx = day.items.findIndex(x=>x.uid === uid);
+        if(idx === -1) return;
+        const origin = day.items[idx];
+        const clone = {uid: newUid(), name: (origin.name||''), detail: (origin.detail||'')};
+        day.items.splice(idx+1, 0, clone);
+        normalizeDays();
+        renderEditor();
+      };
+    });
+    body.querySelectorAll('[data-delitem]').forEach(btn=>{
+      btn.onclick = () => {
+        syncFieldsToDraft();
+        const [d, uid] = btn.getAttribute('data-delitem').split('|');
+        const day = draft.days[+d];
+        if(day) day.items = day.items.filter(x=>x.uid !== uid);
+        normalizeDays();
+        renderEditor();
+      };
+    });
+    body.querySelectorAll('[data-rest]').forEach(cb=>{
+      cb.onchange = () => {
+        syncFieldsToDraft();
+        const d = +cb.getAttribute('data-rest');
+        if(draft.days[d]) draft.days[d].rest = cb.checked;
+        normalizeDays();
+        renderEditor();
+      };
+    });
+    const lenEl = document.getElementById('cLen');
+    if(lenEl){
+      lenEl.onchange = () => {
+        syncFieldsToDraft();
+        normalizeDays();
+        renderEditor();
+      };
+    }
+    const cancelBtn = document.getElementById('cancelBtn');
+    if(cancelBtn) cancelBtn.onclick = () => dlg.close();
+    const saveBtn = document.getElementById('saveBtn');
+    if(saveBtn) saveBtn.onclick = () => {
+      syncFieldsToDraft();
+      normalizeDays();
+      if(!draft.name){ alert('请填写循环名称'); return; }
+      const clean = JSON.parse(JSON.stringify(draft));
+      clean.days.forEach(d=>{
+        d.items = (d.items||[]).filter(it=>it.name && it.name.trim());
+      });
+      if(isNew) state.cycles.push(clean);
+      else state.cycles[index] = clean;
+      save(); dlg.close(); render();
+    };
+    const delBtn = document.getElementById('delCycle');
+    if(delBtn) delBtn.onclick = () => {
+      if(!confirm('删除这个循环？')) return;
+      state.cycles.splice(index, 1);
+      save(); dlg.close(); render();
+    };
+  }
+
+  renderEditor();
+  dlg.showModal();
+}
+
+function defaultDays(n){
+  const arr = [];
+  for(let i=0;i<n;i++) arr.push({rest:true, items:[]});
+  return arr;
+}
+
+/* ---------- 备份与恢复 ---------- */
+function backupJson(){
+  return JSON.stringify(state, null, 2);
+}
+
+function exportData(){
+  try{
+    const blob = new Blob([backupJson()], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'training-cycles-' + todayStr() + '.json';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{
+      URL.revokeObjectURL(a.href);
+      a.remove();
+    }, 1000);
+  }catch(e){
+    alert('文件导出失败，请改用“复制备份文本”。');
+    showCopyBackup();
+  }
+}
+
+function showCopyBackup(){
+  const box = document.getElementById('copyBox');
+  const ta = document.getElementById('copyText');
+  ta.value = backupJson();
+  box.classList.add('show');
+  document.getElementById('pasteBox').classList.remove('show');
+
+  ta.focus();
+  ta.select();
+  let ok = false;
+  try{ ok = document.execCommand('copy'); }catch(e){ ok = false; }
+  if(!ok && navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(ta.value).then(()=>{
+      alert('备份内容已复制到剪贴板。');
+    }).catch(()=>{
+      alert('自动复制失败，请长按文本框全选后手动复制。');
+    });
+    return;
+  }
+  if(ok) alert('备份内容已复制到剪贴板。');
+  else alert('自动复制失败，请长按文本框全选后手动复制。');
+}
+
+function showPasteBackup(){
+  const box = document.getElementById('pasteBox');
+  box.classList.add('show');
+  document.getElementById('copyBox').classList.remove('show');
+  document.getElementById('pasteText').value = '';
+  document.getElementById('pasteText').focus();
+}
+function hidePasteBackup(){
+  document.getElementById('pasteBox').classList.remove('show');
+}
+
+function applyImportedData(data){
+  if(!data || !Array.isArray(data.cycles)) throw new Error('格式不对：缺少 cycles 数组');
+  if(!confirm('导入会覆盖当前所有循环，确定？')) return false;
+  data.cycles.forEach(c=>{
+    if(typeof c.enabled !== 'boolean') c.enabled = true;
+    (c.days||[]).forEach(d=>{
+      d.items = (d.items||[]).map(it=>({uid: it.uid || newUid(), name: it.name||'', detail: it.detail||''}));
+    });
+  });
+  state = data;
+  save(); render();
+  return true;
+}
+
+function importPasted(){
+  const raw = document.getElementById('pasteText').value.trim();
+  if(!raw){ alert('请先粘贴备份内容'); return; }
+  try{
+    const data = JSON.parse(raw);
+    if(applyImportedData(data)){
+      hidePasteBackup();
+      alert('导入成功');
+    }
+  }catch(e){
+    alert('导入失败：' + e.message);
+  }
+}
+
+function importData(ev){
+  const file = ev.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const data = JSON.parse(reader.result);
+      if(applyImportedData(data)) alert('导入成功');
+    }catch(e){
+      alert('导入失败：' + e.message + '\n可改用“粘贴备份文本”。');
+    }
+  };
+  reader.readAsText(file);
+  ev.target.value = '';
+}
+
+document.querySelectorAll('.tab').forEach(t=>{
+  t.onclick = () => switchView(t.getAttribute('data-view'));
+});
+render();
+</script>
+</body>
+</html>
